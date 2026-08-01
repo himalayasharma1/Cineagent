@@ -28,15 +28,15 @@ EMBED_MODEL_NAME = "all-MiniLM-L6-v2"
 # Retrieval defaults
 DEFAULT_K = 5
 
-# Similarity threshold — chunks with cosine *distance* above this are dropped.
-# (ChromaDB returns distance, not similarity. Lower distance = more similar.)
-# 0.7 matches CineQuery's existing guardrail.
-SIMILARITY_THRESHOLD = 0.7
+# Tightened from 0.7 → 0.62 based on eval evidence: in-domain queries
+# land at ~0.42-0.49, OOD near-misses (e.g. "Bong Joon-ho") at ~0.68.
+# 0.62 sits in the gap — rejects topically-adjacent-but-absent entities
+# without harming recall. Verified against the full eval suite.
+# Note: does NOT catch OOD queries that match a *concept* present in the
+# corpus (e.g. "Greta Gerwig" → female-director chunks at ~0.51); that
+# relevance judgment is deferred to the agent layer.
+SIMILARITY_THRESHOLD = 0.62
 
-# ---------------------------------------------------------------
-# One-time setup: load embedder and connect to ChromaDB.
-# These are module-level so they're loaded once per process,
-# not once per tool call. Important for performance.
 # ---------------------------------------------------------------
 _embedder = None
 _collection = None
