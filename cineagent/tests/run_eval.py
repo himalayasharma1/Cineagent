@@ -16,16 +16,28 @@ Design notes:
 """
 
 import time
+
+# Maps a case's "tool" field to the function that executes it.
+# Cases without a "tool" field default to Tool 1 (backwards compatible).
+
 from collections import defaultdict
 
 from cineagent.tools.cinema_search import search_cinema_knowledge
 from cineagent.tests.eval_cases import EVAL_CASES
-
+from cineagent.tools.film_details import get_film_details   # NEW
 
 # ---------------------------------------------------------------
 # Assertion checkers.
 # Each returns (passed: bool, detail: str). detail explains a failure.
 # ---------------------------------------------------------------
+
+
+TOOL_REGISTRY = {
+    "search_cinema_knowledge": search_cinema_knowledge,
+    "get_film_details": get_film_details,
+}
+
+
 def _check_status(result: dict, expected: str):
     actual = result.get("status")
     if actual == expected:
@@ -64,7 +76,39 @@ def _check_source_contains_all(result: dict, substrings: list):
     return False, (
         f"source_contains_all: missing {missing} from sources {sources}"
     )
+def _check_film_field_contains(result: dict, field_expectations: dict):
+    """
+    For Tool 2 (get_film_details): check that fields inside result["film"]
+    contain expected substrings. Value-drift-safe: use for stable fields
+    only (director, title, original_language), never ratings/vote counts.
 
+    field_expectations: {"director": "Bong", "original_language": "ko"}
+    """
+    film = result.get("film")
+    if film is None:
+        return False, f"film_field_contains: no 'film' in result (status={result.get('status')})"
+
+    failures = []
+    for field, expected_substring in field_expectations.items():
+        actual = film.get(field)
+        actual_str = str(actual) if actual is not None else ""
+        if expected_substring.lower() not in actual_str.lower():
+            failures.append(f"{field}: expected substring '{expected_substring}', got '{actual}'")
+
+    if failures:
+        return False, "film_field_contains: " + "; ".join(failures)
+    return True, ""
+
+
+def _check_film_year(result: dict, expected_year):
+    """Check the film's release_year matches (stable field)."""
+    film = result.get("film")
+    if film is None:
+        return False, f"film_year: no 'film' in result (status={result.get('status')})"
+    actual = film.get("release_year")
+    if str(actual) == str(expected_year):
+        return True, ""
+    return False, f"film_year: expected {expected_year}, got {actual}"
 
 # Map assertion keys to their checker functions.
 ASSERTION_CHECKERS = {
@@ -72,31 +116,39 @@ ASSERTION_CHECKERS = {
     "min_results": _check_min_results,
     "source_contains_any": _check_source_contains_any,
     "source_contains_all": _check_source_contains_all,
+    "film_field_contains": _check_film_field_contains,   # NEW
+    "film_year": _check_film_year,                        # NEW
 }
-
 
 # ---------------------------------------------------------------
 # Run a single case.
 # ---------------------------------------------------------------
-def run_case(case: dict, system_fn) -> dict:
+def run_case(case: dict) -> dict:
     """
-    Execute one case against system_fn and check all its assertions.
-
-    Returns a result dict:
-      {
-        "id": ...,
-        "category": ...,
-        "passed": bool,
-        "failures": [list of failure detail strings],
-        "note": ...,
-      }
+    Execute one case against the tool named in case["tool"]
+    (defaulting to search_cinema_knowledge) and check its assertions.
     """
     query = case["query"]
 
-    # Run the system under test. Catch crashes so one bad case
-    # doesn't kill the whole run — a crash is itself a failure.
+    # Pick the tool this case targets. Default to Tool 1 for older cases.
+    tool_name = case.get("tool", "search_cinema_knowledge")
+    system_fn = TOOL_REGISTRY.get(tool_name)
+    if system_fn is None:
+        return {
+            "id": case["id"],
+            "category": case["category"],
+            "passed": False,
+            "failures": [f"UNKNOWN tool: '{tool_name}'"],
+            "note": case.get("note", ""),
+        }
+
+    # Tool 2 takes an optional `year` kwarg; pass it through if present.
+    call_kwargs = {}
+    if "year" in case:
+        call_kwargs["year"] = case["year"]
+
     try:
-        result = system_fn(query)
+        result = system_fn(query, **call_kwargs)
     except Exception as e:
         return {
             "id": case["id"],
@@ -106,7 +158,6 @@ def run_case(case: dict, system_fn) -> dict:
             "note": case.get("note", ""),
         }
 
-    # Check every assertion present in the case's expect dict.
     failures = []
     for key, expected_value in case["expect"].items():
         checker = ASSERTION_CHECKERS.get(key)
@@ -125,19 +176,17 @@ def run_case(case: dict, system_fn) -> dict:
         "note": case.get("note", ""),
     }
 
-
 # ---------------------------------------------------------------
 # Run the full suite and report.
 # ---------------------------------------------------------------
-def run_eval(system_fn=search_cinema_knowledge, cases=EVAL_CASES):
+def run_eval(cases=EVAL_CASES):
     print("=" * 64)
     print(f"CineAgent Eval Run — {time.strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"System under test: {system_fn.__name__}")
     print(f"Total cases: {len(cases)}")
     print("=" * 64)
 
     start = time.time()
-    results = [run_case(c, system_fn) for c in cases]
+    results = [run_case(c) for c in cases]
     elapsed = time.time() - start
 
     # Aggregate
@@ -184,3 +233,4 @@ def run_eval(system_fn=search_cinema_knowledge, cases=EVAL_CASES):
 
 if __name__ == "__main__":
     run_eval()
+

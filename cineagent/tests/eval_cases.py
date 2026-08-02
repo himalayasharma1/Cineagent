@@ -207,4 +207,82 @@ EVAL_CASES = [
         },
         "note": "Gibberish (non-empty). Should retrieve nothing above threshold, not error.",
     },
-]
+# ===============================================================
+    # TOOL 2 — get_film_details (TMDB, live API)
+    # Assertions on STABLE fields only (status, director, year,
+    # language). Never on ratings/vote counts — those drift.
+    # ===============================================================
+
+    {
+        "id": "film_001",
+        "query": "Parasite",
+        "tool": "get_film_details",
+        "category": "film_single_known",
+        "expect": {
+            "status": "ok",
+            "film_field_contains": {"director": "Bong", "original_language": "ko"},
+            "film_year": "2019",
+        },
+        "note": "Well-known film. Notably ABSENT from local corpus — proves Tool 2 fetches what Tool 1 can't.",
+    },
+    {
+        "id": "film_002",
+        "query": "The Godfather",
+        "tool": "get_film_details",
+        "category": "film_single_known",
+        "expect": {
+            "status": "ok",
+            "film_field_contains": {"director": "Coppola"},
+            "film_year": "1972",
+        },
+        "note": "Director extraction from credits endpoint. Stable fields only.",
+    },
+    {
+        "id": "film_003",
+        "query": "Sholay",
+        "tool": "get_film_details",
+        "category": "film_single_known",
+        "expect": {
+            "status": "ok",
+            "film_field_contains": {"director": "Sippy", "original_language": "hi"},
+            "film_year": "1975",
+        },
+        "note": "Non-Hollywood coverage. Tests TMDB handles Indian cinema.",
+    },
+
+    # --- Disambiguation ---
+    {
+        "id": "film_disambig_001",
+        "query": "Drive",
+        "tool": "get_film_details",
+        "year": 2011,
+        "category": "film_disambiguation",
+        "expect": {
+            "status": "ok",
+            "film_field_contains": {"director": "Refn"},
+            "film_year": "2011",
+        },
+        "note": "Ambiguous title + year param. Must resolve to the 2011 Refn film.",
+    },
+
+    # --- Failure modes ---
+    {
+        "id": "film_ood_001",
+        "query": "qwertyuiop asdfghjkl zxcvbnm",
+        "tool": "get_film_details",
+        "category": "film_no_results",
+        "expect": {
+            "status": "no_results",
+        },
+        "note": "Gibberish title. TMDB returns nothing — tool must report no_results, not crash.",
+    },
+    {
+        "id": "film_edge_001",
+        "query": "",
+        "tool": "get_film_details",
+        "category": "film_edge_case",
+        "expect": {
+            "status": "error",
+        },
+        "note": "Empty title. Input validation before any network call.",
+    },]
