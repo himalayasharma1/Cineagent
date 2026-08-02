@@ -24,17 +24,20 @@ from collections import defaultdict
 
 from cineagent.tools.cinema_search import search_cinema_knowledge
 from cineagent.tests.eval_cases import EVAL_CASES
-from cineagent.tools.film_details import get_film_details   # NEW
+from cineagent.tools.film_details import get_film_details
+from cineagent.tools.streaming_lookup import streaming_lookup
 
-# ---------------------------------------------------------------
-# Assertion checkers.
-# Each returns (passed: bool, detail: str). detail explains a failure.
-# ---------------------------------------------------------------
+
+def _streaming_no_availability_probe(title: str, **kwargs):
+    """Probe for no_availability state by querying against Antarctica (AQ)."""
+    return streaming_lookup(title, country="AQ")
 
 
 TOOL_REGISTRY = {
     "search_cinema_knowledge": search_cinema_knowledge,
     "get_film_details": get_film_details,
+    "streaming_lookup": streaming_lookup,
+    "streaming_no_avail_probe": _streaming_no_availability_probe,
 }
 
 
@@ -110,14 +113,32 @@ def _check_film_year(result: dict, expected_year):
         return True, ""
     return False, f"film_year: expected {expected_year}, got {actual}"
 
+def _check_top_field_contains(result: dict, field_expectations: dict):
+    """
+    Check that top-level result fields contain expected substrings.
+    Used for Tool 3 (streaming_lookup), whose fields (title, country)
+    sit at the top level rather than nested. Drift-safe: use for stable
+    fields (title, year, country) only, never provider lists.
+    """
+    failures = []
+    for field, expected_substring in field_expectations.items():
+        actual = result.get(field)
+        actual_str = str(actual) if actual is not None else ""
+        if expected_substring.lower() not in actual_str.lower():
+            failures.append(f"{field}: expected substring '{expected_substring}', got '{actual}'")
+    if failures:
+        return False, "top_field_contains: " + "; ".join(failures)
+    return True, ""
+
 # Map assertion keys to their checker functions.
 ASSERTION_CHECKERS = {
     "status": _check_status,
     "min_results": _check_min_results,
     "source_contains_any": _check_source_contains_any,
     "source_contains_all": _check_source_contains_all,
-    "film_field_contains": _check_film_field_contains,   # NEW
-    "film_year": _check_film_year,                        # NEW
+    "film_field_contains": _check_film_field_contains,
+    "film_year": _check_film_year,
+    "top_field_contains": _check_top_field_contains,   # NEW
 }
 
 # ---------------------------------------------------------------
@@ -142,10 +163,12 @@ def run_case(case: dict) -> dict:
             "note": case.get("note", ""),
         }
 
-    # Tool 2 takes an optional `year` kwarg; pass it through if present.
+    # Tool 2 takes an optional `year` kwarg; Tool 3 takes `country`.
     call_kwargs = {}
     if "year" in case:
         call_kwargs["year"] = case["year"]
+    if "country" in case:
+        call_kwargs["country"] = case["country"]
 
     try:
         result = system_fn(query, **call_kwargs)

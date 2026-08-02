@@ -285,4 +285,75 @@ EVAL_CASES = [
             "status": "error",
         },
         "note": "Empty title. Input validation before any network call.",
+    },
+    
+    
+    # ===============================================================
+    # TOOL 3 — streaming_lookup (TMDB watch-providers, live API)
+    # Assertions on STABLE fields only (status, title, year, country).
+    # NEVER on specific providers — those drift as licensing changes.
+    # ===============================================================
+
+    {
+        "id": "stream_001",
+        "query": "Oppenheimer",
+        "tool": "streaming_lookup",
+        "country": "IN",
+        "category": "stream_available",
+        "expect": {
+            "status": "ok",
+            "top_field_contains": {"title": "Oppenheimer", "country": "IN"},
+        },
+        "note": "Major recent film, widely available in IN. Asserts status + stable fields, not providers.",
+    },
+    {
+        "id": "stream_002",
+        "query": "Parasite",
+        "tool": "streaming_lookup",
+        "country": "US",
+        "category": "stream_available",
+        "expect": {
+            "status": "ok",
+            "top_field_contains": {"title": "Parasite", "country": "US"},
+        },
+        "note": "Country-awareness: same film, US region. Verifies country param flows through.",
+    },
+
+    # --- no_availability (deterministic-ish probe against a no-market country) ---
+    {
+        "id": "stream_no_avail_001",
+        "query": "Oppenheimer",
+        "tool": "streaming_no_avail_probe",
+        "category": "stream_no_availability",
+        "expect": {
+            "status": "no_availability",
+        },
+        "note": (
+            "Verifies the no_availability branch: a real film queried against a "
+            "country with no streaming market (AQ) reliably has no provider block. "
+            "Deviates from live-eval default because this state can't be triggered "
+            "reliably against a normal-market country without flakiness."
+        ),
+    },
+
+    # --- Failure modes ---
+    {
+        "id": "stream_no_results_001",
+        "query": "qwertyuiop asdfghjkl zxcvbnm",
+        "tool": "streaming_lookup",
+        "category": "stream_no_results",
+        "expect": {
+            "status": "no_results",
+        },
+        "note": "Gibberish title. Film search fails → no_results, distinct from no_availability.",
+    },
+    {
+        "id": "stream_edge_001",
+        "query": "",
+        "tool": "streaming_lookup",
+        "category": "stream_edge_case",
+        "expect": {
+            "status": "error",
+        },
+        "note": "Empty title. Input validation before any network call.",
     },]
