@@ -23,10 +23,12 @@ if __name__ == "__main__":
     #show("What is Christopher Nolan's approach to storytelling?")
 
     # --- Test 2: STREAMING query -> should pick streaming_lookup ---
-     show("Where can I watch Oppenheimer in India?")
+     #show("Where can I watch Oppenheimer in India?")
 
     # --- Test 3: MULTI-TOOL sequential -> should call TWO tools across turns ---
-    # show("Is Parasite streaming in India, and what is it about?")
+    #show("Is Parasite streaming in India, and what is it about?")
 
     # --- Test 4: GERWIG relevance judgment -> should NOT pretend ---
-    # show("Tell me about Greta Gerwig's directing style.")
+    #show("Tell me about Greta Gerwig's directing style.")
+    # --- Test 5: capability-gap probe -> tool can't do "all countries" ---
+    show("Which countries is Oppenheimer available to stream in?")

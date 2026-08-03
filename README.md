@@ -2,7 +2,7 @@ markdown# CineAgent
 
 An agentic AI for world cinema knowledge, built on the **CineQuery** retrieval foundation. CineAgent extends a local-first RAG system into a tool-using agent that reasons about films and directors, and pulls real-time data like current film metadata and streaming availability.
 
-> **Status:** Active development. The CineQuery RAG foundation, all three agent tools, and a working hand-rolled ReAct loop that orchestrates them are complete; the tools are covered by a multi-tool evaluation harness (25/26, one documented intentional failure). Next: agent-level evaluation and observability — see the [Roadmap](#roadmap). This README tracks the *actual* state of the code and is updated as each phase ships.
+> **Status:** Active development. The CineQuery RAG foundation, all three agent tools, and a working hand-rolled ReAct loop are complete and stress-tested, with boundaries documented in [Known limitations & scope](#known-limitations--scope). The tools are covered by a multi-tool evaluation harness (26/27, one documented intentional failure). Next: agent-level evaluation and observability — see the Roadmap.
 
 ---
 
@@ -112,6 +112,7 @@ Planned and in progress. Clearly *not yet built* — this section shrinks as fea
 
 Each capability follows a **"done = evaluated"** rule: it is not considered complete until its evaluation cases are written and passing.
 
+- [ ] **Tool 4 — director filmography** (candidate): a `get_director_filmography` tool (TMDB `/person/{id}/movie_credits`) to answer "latest/newest film by X" questions with current data, closing the confabulation gap found in testing
 ---
 
 ## Tech stack
@@ -189,3 +190,14 @@ TMDB_API_KEY=your_key_here
 ---
 
 *This project is in active development. The README reflects the current, verified state of the code and is updated as each phase ships.*
+
+
+## Known limitations & scope
+
+These are deliberate boundaries of the current agent, documented rather than hidden:
+
+- **Per-country streaming only.** `streaming_lookup` answers "is this film available in country X." It does not answer "which countries is this available in" globally. Asked a global-availability question, the agent answers for the default country and flags that the result is country-specific. TMDB's data would support an all-countries mode; it's deliberately out of scope for a "help me decide what to watch here" use case rather than built speculatively.
+- **Out-of-corpus analysis (documented in the eval).** For analysis questions about people not in the local corpus, retrieval can return topically-similar-but-wrong results. The agent is prompted to detect this and decline rather than fabricate — verified in testing (e.g. it correctly refuses to invent an answer about a director absent from the corpus). This is the agent-layer half of a deliberate layered defense; the tool-layer half is the similarity threshold.
+- **Literal (not semantic) loop detection.** The loop stops if the agent makes the *identical* tool call twice in a row. It does not yet detect *semantic* repetition — reformulating the same unanswerable query with different wording and getting substantially the same results. In testing, a question whose answer wasn't in the corpus produced three near-identical searches before the agent correctly gave up. It reaches the right answer (an honest "I don't have that") and terminates naturally, but less efficiently than ideal. Detecting substantially-repeated *results* (not just identical *calls*) is a planned improvement.
+- **No current-filmography lookup — "latest/newest" questions can be stale.** The agent has no tool that lists a director's films by date, and the local corpus is frozen at scrape time. Asked for someone's "latest" film, the model may answer from its own training data rather than verifying — and because the tool it *does* call confirms correct details about that (stale) guess, the answer looks fully sourced while the underlying "this is the latest" premise goes unchecked. This is the most subtle failure mode found in testing: dangerous precisely because every visible fact is correct and only the unstated premise is wrong. Fixing it requires a director-filmography tool with current data (TMDB supports this) plus prompt work to treat currency questions as requiring premise verification, not just detail confirmation.
+- **Answers are bounded by tool + corpus coverage.** More generally, the agent is only as current and complete as its three tools and static corpus. It's built to *decline* when retrieved results are visibly irrelevant (verified), but it cannot detect when a tool confirms a subtly wrong premise. Questions requiring capabilities the tools don't have (global availability, current filmographies) are out of scope by design rather than answered speculatively.
