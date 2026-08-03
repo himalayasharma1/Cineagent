@@ -24,20 +24,20 @@ from collections import defaultdict
 
 from cineagent.tools.cinema_search import search_cinema_knowledge
 from cineagent.tests.eval_cases import EVAL_CASES
-from cineagent.tools.film_details import get_film_details
-from cineagent.tools.streaming_lookup import streaming_lookup
+from cineagent.tools.film_details import get_film_details   # NEW
+from cineagent.tools.streaming_lookup import streaming_lookup   # NEW
 
-
-def _streaming_no_availability_probe(title: str, **kwargs):
-    """Probe for no_availability state by querying against Antarctica (AQ)."""
-    return streaming_lookup(title, country="AQ")
+# ---------------------------------------------------------------
+# Assertion checkers.
+# Each returns (passed: bool, detail: str). detail explains a failure.
+# ---------------------------------------------------------------
 
 
 TOOL_REGISTRY = {
     "search_cinema_knowledge": search_cinema_knowledge,
     "get_film_details": get_film_details,
     "streaming_lookup": streaming_lookup,
-    "streaming_no_avail_probe": _streaming_no_availability_probe,
+    "streaming_no_avail_probe": _streaming_no_availability_probe, 
 }
 
 
@@ -163,12 +163,10 @@ def run_case(case: dict) -> dict:
             "note": case.get("note", ""),
         }
 
-    # Tool 2 takes an optional `year` kwarg; Tool 3 takes `country`.
+    # Tool 2 takes an optional `year` kwarg; pass it through if present.
     call_kwargs = {}
     if "year" in case:
         call_kwargs["year"] = case["year"]
-    if "country" in case:
-        call_kwargs["country"] = case["country"]
 
     try:
         result = system_fn(query, **call_kwargs)

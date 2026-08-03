@@ -2,7 +2,7 @@ markdown# CineAgent
 
 An agentic AI for world cinema knowledge, built on the **CineQuery** retrieval foundation. CineAgent extends a local-first RAG system into a tool-using agent that reasons about films and directors, and pulls real-time data like current film metadata and streaming availability.
 
-> **Status:** Active development. The CineQuery RAG foundation and all three agent tools (local retrieval, TMDB film details, streaming availability) are complete and covered by a multi-tool evaluation harness (25/26, with one documented, intentional failure). The agent reasoning loop that orchestrates these tools is next — see the [Roadmap](#roadmap). This README tracks the *actual* state of the code and is updated as each phase ships.
+> **Status:** Active development. The CineQuery RAG foundation, all three agent tools, and a working hand-rolled ReAct loop that orchestrates them are complete; the tools are covered by a multi-tool evaluation harness (25/26, one documented intentional failure). Next: agent-level evaluation and observability — see the [Roadmap](#roadmap). This README tracks the *actual* state of the code and is updated as each phase ships.
 
 ---
 
@@ -78,6 +78,14 @@ The two sub-corpora have different textual character — factual vs. critical �
 - Four-state contract: distinguishes "available," "film exists but streams nowhere here" (`no_availability`), "film not found" (`no_results`), and error — so the agent can phrase each situation differently
 - Graceful network-failure handling, consistent with Tool 2
 
+### CineAgent ReAct loop (Version A, hand-rolled) — working
+- A reasoning loop that orchestrates the three tools: the model reasons, calls one tool at a time, observes the result, and repeats until it can answer.
+- Four hand-built components: a system prompt defining the protocol, a parser that extracts tool calls from the model's output, a dispatcher that safely routes calls to the real tools, and a loop executor that ties them together.
+- Three stop conditions: natural termination (model answers), a hard iteration cap, and no-progress detection (identical repeated tool call).
+- Every malformed input — bad JSON, unknown tool, missing argument — becomes recoverable feedback the model can correct, never a crash.
+- Returns a full trace of every reasoning step, tool call, and observation, so the loop's decisions are legible rather than inferred.
+- Runs entirely on local inference (Qwen3-4B via llama.cpp); external calls happen only inside the tools.
+
 ### Local LLM inference — verified
 - **Qwen3-4B-Instruct-2507** (Q4_K_M GGUF) via `llama.cpp` with Metal GPU acceleration
 - Tool-call emission verified (`<tool_call>` format) with a custom parser — chosen over library auto-parsing for explicit control
@@ -89,7 +97,7 @@ A representative finding from development: the harness surfaced that the retriev
 
 The harness also demonstrates knowing *when to deviate from a default*: the tools are evaluated against live APIs, but the one state that can't be reliably triggered against live data — a film that exists but streams nowhere in a given country — is verified with a deterministic probe instead, because a flaky test is worse than a targeted one.
 
-Current suite: **26 cases across three tools and 13 categories, 25 passing**, with the single remaining failure being the documented, intentional one described above.
+Current suite: **26 cases across three tools and 13 categories, 25 passing**, with the single remaining failure being the documented, intentional one described above. Agent-level evaluation (tool-selection accuracy, termination behaviour) is the next phase.
 
 ---
 
@@ -97,8 +105,8 @@ Current suite: **26 cases across three tools and 13 categories, 25 passing**, wi
 
 Planned and in progress. Clearly *not yet built* — this section shrinks as features move up into [What's built](#whats-built).
 
-- [ ] **Hand-rolled ReAct loop** (Version A): the reasoning loop that orchestrates the three tools, built from scratch for full control and understanding
-- [ ] **Guardrails layer**: iteration cap, loop detection, tool-error recovery
+- [ ] **Agent-level evaluation**: extend the harness to score the loop itself — tool-selection accuracy, termination behaviour, and relevance judgment on out-of-corpus queries
+- [ ] **Guardrails layer**: formalize iteration cap, loop detection, and tool-error recovery as a named layer
 - [ ] **Observability**: per-iteration tracing of the agent's Thought → Action → Observation cycle
 - [ ] **LangGraph rebuild** (Version B): the same agent on a framework, as a deliberate build-vs-framework comparison
 
@@ -130,6 +138,11 @@ cinequery/
 │   ├── raw/                  # Source corpus (Wikipedia + Senses of Cinema)
 │   └── chroma_db/            # Persistent vector store (gitignored)
 └── cineagent/
+├── agent/
+│   ├── dispatcher.py     # Tool schemas + safe tool dispatch
+│   ├── parser.py         # Extracts tool calls / reasoning from model output
+│   ├── prompt.py         # Builds the ReAct system prompt
+│   └── loop.py           # The ReAct loop executor
 ├── tools/
 │   ├── cinema_search.py     # Tool 1 — search_cinema_knowledge
 │   ├── film_details.py      # Tool 2 — get_film_details (TMDB)
@@ -163,8 +176,6 @@ python -m cineagent.tests.run_eval
 
 A local GGUF model is required for inference, and a `.env` file with a `TMDB_API_KEY` is required for the film-details and streaming tools:
 TMDB_API_KEY=your_key_here
-
-The full agent loop (in progress) will document any additional configuration as those components land.
 
 ---
 
