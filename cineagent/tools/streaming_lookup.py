@@ -35,7 +35,68 @@ REQUEST_TIMEOUT = 8
 # India, matching the primary use case.
 DEFAULT_COUNTRY = "IN"
 
+# ---------------------------------------------------------------
+# Country normalization.
+# The model (and users) say "India", "USA", "UK" — but TMDB keys
+# availability by ISO 3166-1 alpha-2 codes ("IN", "US", "GB").
+# We normalize common names/variants to codes. Unknown input is
+# rejected LOUDLY (error status) rather than silently guessed —
+# a visible error gets fixed; a silent wrong answer gets shipped.
+# ---------------------------------------------------------------
 
+# The set of valid 2-letter codes we accept directly (expand as needed).
+_VALID_ISO_CODES = {
+    "IN", "US", "GB", "CA", "AU", "FR", "DE", "JP", "KR", "IT",
+    "ES", "BR", "MX", "NL", "SE", "AQ",
+}
+
+# Common names / variants -> ISO code.
+_COUNTRY_NAME_TO_ISO = {
+    "india": "IN",
+    "united states": "US", "usa": "US", "us": "US", "america": "US",
+    "united kingdom": "GB", "uk": "GB", "britain": "GB", "england": "GB",
+    "canada": "CA",
+    "australia": "AU",
+    "france": "FR",
+    "germany": "DE",
+    "japan": "JP",
+    "south korea": "KR", "korea": "KR",
+    "italy": "IT",
+    "spain": "ES",
+    "brazil": "BR",
+    "mexico": "MX",
+    "netherlands": "NL",
+    "sweden": "SE",
+}
+
+
+def _normalize_country(country: str):
+    """
+    Normalize a country string to an ISO 3166-1 alpha-2 code.
+
+    Returns (code, None) on success, or (None, error_message) if the
+    input can't be recognized — so the caller can fail loudly rather
+    than silently querying a nonexistent country key.
+    """
+    if not country or not country.strip():
+        return DEFAULT_COUNTRY, None
+
+    raw = country.strip()
+
+    # Already a valid 2-letter code?
+    if raw.upper() in _VALID_ISO_CODES:
+        return raw.upper(), None
+
+    # A known country name / variant?
+    mapped = _COUNTRY_NAME_TO_ISO.get(raw.lower())
+    if mapped:
+        return mapped, None
+
+    # Unrecognized — fail loudly.
+    return None, (
+        f"Unrecognized country '{country}'. Use an ISO 3166-1 alpha-2 "
+        f"code (e.g. 'IN', 'US') or a common country name."
+    )
 # ---------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------
@@ -141,7 +202,9 @@ def streaming_lookup(title: str, country: str = DEFAULT_COUNTRY) -> dict:
             "message": "TMDB_API_KEY not found. Check your .env file.",
         }
 
-    country = (country or DEFAULT_COUNTRY).upper()
+    country, country_error = _normalize_country(country)
+    if country_error:
+        return {"status": "error", "message": country_error}
 
     # --- Step 1: resolve title -> film ID ---
     try:

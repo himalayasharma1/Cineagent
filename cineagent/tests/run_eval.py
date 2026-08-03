@@ -27,6 +27,12 @@ from cineagent.tests.eval_cases import EVAL_CASES
 from cineagent.tools.film_details import get_film_details   # NEW
 from cineagent.tools.streaming_lookup import streaming_lookup   # NEW
 
+
+def _streaming_no_availability_probe(query: str, **kwargs):
+    """Probe for no_availability status branch using Antarctica (AQ) region."""
+    return streaming_lookup(query, country="AQ")
+
+
 # ---------------------------------------------------------------
 # Assertion checkers.
 # Each returns (passed: bool, detail: str). detail explains a failure.
@@ -163,10 +169,12 @@ def run_case(case: dict) -> dict:
             "note": case.get("note", ""),
         }
 
-    # Tool 2 takes an optional `year` kwarg; pass it through if present.
+    # Tools take optional kwargs (year, country); pass them through if present.
     call_kwargs = {}
     if "year" in case:
         call_kwargs["year"] = case["year"]
+    if "country" in case:
+        call_kwargs["country"] = case["country"]
 
     try:
         result = system_fn(query, **call_kwargs)

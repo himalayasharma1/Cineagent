@@ -356,4 +356,24 @@ EVAL_CASES = [
             "status": "error",
         },
         "note": "Empty title. Input validation before any network call.",
+    },
+    
+    {
+        "id": "stream_country_normalization_001",
+        "query": "Oppenheimer",
+        "tool": "streaming_lookup",
+        "country": "India",
+        "category": "stream_available",
+        "expect": {
+            "status": "ok",
+            "top_field_contains": {"title": "Oppenheimer", "country": "IN"},
+        },
+        "note": (
+            "REGRESSION GUARD. The agent passed the human name 'India' instead "
+            "of ISO 'IN', which the tool silently uppercased to 'INDIA' and "
+            "returned a false 'not available'. Fix: the tool normalizes common "
+            "country names to ISO codes. This case passes 'India' and asserts "
+            "it resolves to country 'IN' with real availability — so the silent "
+            "failure can never return unnoticed."
+        ),
     },]
